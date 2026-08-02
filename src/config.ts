@@ -64,5 +64,5 @@ export function parseHost(): string {
     const match = arg.match(/^--host=(.+)$/);
     if (match) return match[1];
   }
-  return process.env.HOST ?? "0.0.0.0";
+  return process.env.BIND_HOST ?? "0.0.0.0";
 }

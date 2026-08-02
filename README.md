@@ -84,7 +84,7 @@ node dist/index.js --access-mode=restricted
 | Variable / Flag | Default | Beschreibung |
 |---|---|---|
 | `TRANSPORT` / `--transport=` | `stdio` | `stdio` oder `http` |
-| `HOST` / `--host=` | `0.0.0.0` | HTTP Bind-Adresse |
+| `BIND_HOST` / `--host=` | `0.0.0.0` | HTTP Bind-Adresse (nicht `HOST` — Coolify/PaaS überschreibt das) |
 | `PORT` / `--port=` | `8000` | HTTP Port |
 
 ## Cursor einbinden
