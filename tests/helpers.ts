@@ -4,8 +4,9 @@ export function body(result: ToolResult): string {
   return result.content[0].text;
 }
 
-export function parseJson<T = unknown>(result: ToolResult): T {
-  return JSON.parse(body(result)) as T;
+export function parseJson<T = unknown>(result: ToolResult | string): T {
+  const text = typeof result === "string" ? result : body(result);
+  return JSON.parse(text) as T;
 }
 
 export function assertSuccess(result: ToolResult, label: string): string {

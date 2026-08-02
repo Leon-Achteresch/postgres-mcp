@@ -17,10 +17,13 @@ import {
   type ToolResult,
 } from "./helpers.js";
 
-const url = process.env.TEST_DATABASE_URL;
-if (!url) {
-  throw new Error("TEST_DATABASE_URL is required");
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`${name} is required`);
+  return value;
 }
+
+const dbUrl = requireEnv("TEST_DATABASE_URL");
 
 type DbRow = { id: string; default: boolean };
 type TablePick = { schema: string; table: string };
@@ -36,7 +39,7 @@ let hasPgStat = false;
 let hasHypopg = false;
 
 function initRestricted(): void {
-  initDb("restricted", { databases: { default: url, replica: url }, defaultDb: "default" });
+  initDb("restricted", { databases: { default: dbUrl, replica: dbUrl }, defaultDb: "default" });
 }
 
 async function discover(): Promise<void> {
@@ -62,8 +65,21 @@ async function discover(): Promise<void> {
 
   installedExtensions = parseJson<string[]>(await listObjects("public", "extension"));
   const extRows = await query(undefined, "SELECT extname FROM pg_extension");
-  hasPgStat = extRows.some((r) => r.extname === "pg_stat_statements");
   hasHypopg = extRows.some((r) => r.extname === "hypopg");
+  try {
+    await query(undefined, "SELECT 1 FROM pg_stat_statements LIMIT 1");
+    hasPgStat = true;
+  } catch {
+    hasPgStat = false;
+  }
+  if (!hasHypopg) {
+    try {
+      await query(undefined, "SELECT hypopg_reset()");
+      hasHypopg = true;
+    } catch {
+      hasHypopg = false;
+    }
+  }
 }
 
 describe("postgres-mcp integration (read-only)", () => {
@@ -230,7 +246,7 @@ describe("postgres-mcp integration (read-only)", () => {
   });
 
   describe("execute_sql", () => {
-    it("runs a read-only version query", () => {
+    it("runs a read-only version query", async () => {
       const rows = parseJson<Record<string, unknown>[]>(
         assertSuccess(await executeSql("SELECT version()"), "execute_sql version")
       );
@@ -318,7 +334,7 @@ describe("postgres-mcp integration (read-only)", () => {
     it("reports install hint or results for resources", async () => {
       const text = body(await getTopResourceQueries());
       if (!hasPgStat) {
-        assert.ok(hasExtensionMessage(text, "pg_stat_statements"));
+        assert.ok(hasExtensionMessage(text, "pg_stat_statements") || text.includes("shared_preload_libraries"));
         return;
       }
       assertSuccess({ content: [{ type: "text", text }] }, "top resources");
@@ -326,14 +342,20 @@ describe("postgres-mcp integration (read-only)", () => {
 
     it("reports install hint or results for mean_time", async () => {
       const text = body(await getTopQueries("mean_time", 5));
-      if (!hasPgStat) return assert.ok(hasExtensionMessage(text, "pg_stat_statements"));
+      if (!hasPgStat) {
+        assert.ok(hasExtensionMessage(text, "pg_stat_statements") || text.includes("shared_preload_libraries"));
+        return;
+      }
       const rows = parseJson<unknown[]>(assertSuccess({ content: [{ type: "text", text }] }, "mean_time"));
       assert.ok(Array.isArray(rows));
     });
 
     it("reports install hint or results for total_time", async () => {
       const text = body(await getTopQueries("total_time", 5));
-      if (!hasPgStat) return assert.ok(hasExtensionMessage(text, "pg_stat_statements"));
+      if (!hasPgStat) {
+        assert.ok(hasExtensionMessage(text, "pg_stat_statements") || text.includes("shared_preload_libraries"));
+        return;
+      }
       assert.match(text, /slowest queries/i);
     });
   });
@@ -365,11 +387,11 @@ describe("postgres-mcp integration (read-only)", () => {
   });
 
   describe("analyze_query_indexes", () => {
-    it("rejects empty query list", () => {
+    it("rejects empty query list", async () => {
       assertError(await analyzeQueryIndexes([]), "empty queries");
     });
 
-    it("rejects more than 10 queries", () => {
+    it("rejects more than 10 queries", async () => {
       assertError(await analyzeQueryIndexes(Array(11).fill("SELECT 1")), "max queries");
     });
 
@@ -389,7 +411,7 @@ describe("postgres-mcp integration (read-only)", () => {
     it("reports extension requirement or workload analysis", async () => {
       const text = body(await analyzeWorkloadIndexes());
       if (!hasPgStat) {
-        assert.ok(hasExtensionMessage(text, "pg_stat_statements"));
+        assert.ok(hasExtensionMessage(text, "pg_stat_statements") || text.includes("shared_preload_libraries"));
         return;
       }
       if (!hasHypopg) {

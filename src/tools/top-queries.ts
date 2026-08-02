@@ -21,7 +21,9 @@ export async function getTopQueries(
     );
     return text(result);
   } catch (e) {
-    return error(String(e));
+    const msg = String(e);
+    if (msg.includes("pg_stat_statements")) return text(PG_STAT_MSG);
+    return error(msg);
   }
 }
 
@@ -51,6 +53,8 @@ export async function getTopResourceQueries(fracThreshold = 0.05, db?: string) {
     );
     return text(result);
   } catch (e) {
-    return error(String(e));
+    const msg = String(e);
+    if (msg.includes("pg_stat_statements")) return text(PG_STAT_MSG);
+    return error(msg);
   }
 }
